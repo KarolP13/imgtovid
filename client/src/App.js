@@ -533,7 +533,7 @@ export default function App() {
         )}
 
       </main>
-      <div className="version-badge">v1.0.5</div>
+      <div className="version-badge">v1.0.6</div>
     </div>
   );
 }
