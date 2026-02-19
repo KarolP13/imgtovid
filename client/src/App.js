@@ -287,7 +287,7 @@ export default function App() {
         '-loop', '1', '-i', 'cover.jpg', '-i', `audio.${ext}`,
         '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'stillimage', '-crf', '23',
         '-c:a', 'aac', '-b:a', '128k', '-pix_fmt', 'yuv420p',
-        '-vf', 'scale=1280:1280:force_original_aspect_ratio=decrease,pad=1280:1280:(ow-iw)/2:(oh-ih)/2:black',
+        '-vf', 'scale=720:720:force_original_aspect_ratio=decrease,pad=720:720:(ow-iw)/2:(oh-ih)/2:black',
         '-shortest', 'output.mp4'
       ]);
 
@@ -533,7 +533,7 @@ export default function App() {
         )}
 
       </main>
-      <div className="version-badge">v1.0.6</div>
+      <div className="version-badge">v1.0.7</div>
     </div>
   );
 }

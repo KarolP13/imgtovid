@@ -1,6 +1,6 @@
 {
     "version": 2,
-    "buildCommand": "cd client && npm install && CI=false npm run build",
+    "buildCommand": "npm install && cd client && npm install && CI=false npm run build",
     "outputDirectory": "client/build",
     "rewrites": [
         {
