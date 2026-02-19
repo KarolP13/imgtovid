@@ -778,3 +778,20 @@ body {
 .twitter-btn:hover {
   background: #0c85d0;
 }
+
+/* ── Version Badge ── */
+.version-badge {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  user-select: none;
+}

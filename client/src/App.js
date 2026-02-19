@@ -504,6 +504,7 @@ export default function App() {
         )}
 
       </main>
+      <div className="version-badge">v1.0.1</div>
     </div>
   );
 }
