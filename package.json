@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev --prefix server\" \"npm start --prefix client\"",
     "start:server": "npm start --prefix server",
     "start:client": "npm start --prefix client",
-    "postinstall": "npx yt-dlp-wrap -o ./yt-dlp && chmod +x ./yt-dlp"
+    "postinstall": "node download_binary.js"
   },
   "dependencies": {
     "axios": "^1.6.0",
