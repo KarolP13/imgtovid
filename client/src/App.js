@@ -90,15 +90,33 @@ export default function App() {
       setSearching(true);
       try {
         const res = await fetch(`/search?q=${encodeURIComponent(val)}&type=track&limit=20`);
+
+        if (!res.ok) {
+          const text = await res.text();
+          let errorDetail = `Server Error (${res.status})`;
+          try {
+            const json = JSON.parse(text);
+            errorDetail = json.detail || json.error || errorDetail;
+          } catch (e) {
+            // If not JSON, use text subset
+            if (text.length > 100) errorDetail += `: ${text.substring(0, 100)}...`;
+            else errorDetail += `: ${text}`;
+          }
+          throw new Error(errorDetail);
+        }
+
         const data = await res.json();
         if (data.error) {
           setErrorMsg(data.detail || data.error);
           setResults([]);
         } else {
-          // Spotify results usually come sorted by relevance
           setResults(data.tracks?.items || []);
         }
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error("Search error:", e);
+        setErrorMsg(e.message);
+        setResults([]);
+      }
       setSearching(false);
     }, 400);
   }
@@ -515,7 +533,7 @@ export default function App() {
         )}
 
       </main>
-      <div className="version-badge">v1.0.4</div>
+      <div className="version-badge">v1.0.5</div>
     </div>
   );
 }
