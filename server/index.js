@@ -199,7 +199,11 @@ app.get("/track/:id", async (req, res) => {
 });
 
 // Export for Vercel
-module.exports = app;
+// Global Error Handler to force JSON responses
+app.use((err, req, res, next) => {
+  console.error("Unhandled Server Error:", err);
+  res.status(500).json({ error: "Internal Server Error", detail: err.message, stack: err.stack });
+});
 
 // Only listen if run directly
 if (require.main === module) {
@@ -211,3 +215,5 @@ if (require.main === module) {
     }
   });
 }
+
+module.exports = app;

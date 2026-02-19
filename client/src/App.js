@@ -182,7 +182,8 @@ export default function App() {
         } else {
           const text = await res.text();
           console.error("Non-JSON Error Response:", text);
-          throw new Error(`Server Error (${res.status}): Please check backend logs.`);
+          const shortText = text.length > 200 ? text.substring(0, 200) + "..." : text;
+          throw new Error(`Server Error (${res.status}): ${shortText}`);
         }
       }
 
@@ -514,7 +515,7 @@ export default function App() {
         )}
 
       </main>
-      <div className="version-badge">v1.0.3</div>
+      <div className="version-badge">v1.0.4</div>
     </div>
   );
 }
