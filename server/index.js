@@ -35,17 +35,23 @@ async function searchItunes(query, limit = 20) {
     const res = await axios.get(url);
 
     // Map iTunes results to Spotify-like format for frontend compatibility
-    const tracks = res.data.results.map(item => ({
-      id: "itunes-" + item.trackId,
-      name: item.trackName,
-      artists: [{ name: item.artistName }],
-      album: {
-        name: item.collectionName,
-        images: [{ url: item.artworkUrl100?.replace('100x100', '600x600') || item.artworkUrl100 }]
-      },
-      preview_url: item.previewUrl,
-      external_urls: { spotify: item.trackViewUrl } // fallback link
-    }));
+    // Use our proxy-image endpoint to allow images in COEP environment
+    const tracks = res.data.results.map(item => {
+      const rawImg = item.artworkUrl100?.replace('100x100', '600x600') || item.artworkUrl100;
+      const proxyImg = rawImg ? `/proxy-image?url=${encodeURIComponent(rawImg)}` : null;
+
+      return {
+        id: "itunes-" + item.trackId,
+        name: item.trackName,
+        artists: [{ name: item.artistName }],
+        album: {
+          name: item.collectionName,
+          images: [{ url: proxyImg }]
+        },
+        preview_url: item.previewUrl,
+        external_urls: { spotify: item.trackViewUrl } // fallback link
+      };
+    });
 
     return { tracks: { items: tracks } };
   } catch (e) {
@@ -114,91 +120,76 @@ app.get("/proxy-audio", async (req, res) => {
   }
 });
 
+// Proxy Image to bypass COEP/CORS issues
+app.get("/proxy-image", async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).send("Missing url");
+  try {
+    const response = await axios.get(url, { responseType: 'stream' });
+    res.setHeader('Content-Type', response.headers['content-type']);
+    // Critical headers for COEP
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    response.data.pipe(res);
+  } catch (e) {
+    console.error("Image Proxy Error:", e.message);
+    res.status(500).send("Failed to fetch image");
+  }
+});
+
 app.get("/download", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "Missing url" });
 
   try {
-    console.log("Proxying download via Spotisaver:", url);
+    console.log("Downloading via yt-dlp:", url);
+    const YTDlpWrap = require('yt-dlp-wrap').default;
 
-    // 1. Extract ID
-    const match = url.match(/(?:track\/|spotify:track:)([a-zA-Z0-9]+)/);
-    const id = match ? match[1] : null;
-    if (!id) return res.status(400).json({ error: "Invalid Spotify URL" });
+    // Locate the binary downloaded by postinstall
+    // In Vercel, it should be in the root or accessible via path
+    // We assume it's in the root project folder found at ../yt-dlp relative to server/index.js
+    const binaryPath = path.resolve(__dirname, '..', 'yt-dlp');
+    console.log("Using yt-dlp binary at:", binaryPath);
 
-    // 2. Get Metadata from Spotisaver
-    const metaUrl = `https://spotisaver.net/api/get_playlist.php?id=${id}&type=track&lang=en`;
-    console.log(`Fetching metadata from: ${metaUrl}`);
-
-    // Pass a real-looking user agent to avoid blocking
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Referer': 'https://spotisaver.net/'
-    };
-
-    const metaRes = await axios.get(metaUrl, { headers });
-
-    // Handle HTML error responses from Spotisaver
-    if (typeof metaRes.data === 'string' && metaRes.data.trim().startsWith('<')) {
-      console.error("Spotisaver returned HTML instead of JSON metadata.");
-      throw new Error("Upstream provider returned an error page.");
+    if (!fs.existsSync(binaryPath)) {
+      throw new Error("yt-dlp binary not found on server.");
     }
 
-    if (!metaRes.data || !metaRes.data.tracks || metaRes.data.tracks.length === 0) {
-      console.error("Spotisaver Metadata Error:", JSON.stringify(metaRes.data));
-      throw new Error("Track not found on Spotisaver");
-    }
+    const ytDlpWrap = new YTDlpWrap(binaryPath);
 
-    const trackData = metaRes.data.tracks[0];
-    const userIp = '192.168.1.1'; // Mock IP to avoid 127.0.0.1 blocking issues
+    // Get metadata first to verify and get filename
+    const metadata = await ytDlpWrap.getVideoInfo(url);
+    const title = metadata.title || 'audio';
+    const filename = `${title}.mp3`.replace(/[^a-z0-9 \.-]/gi, '_');
 
-    console.log(`Found track: ${trackData.name}. Requesting download...`);
+    console.log(`Found track: ${title}`);
 
-    // 3. Request Download
-    const downloadRes = await axios.post('https://spotisaver.net/api/download_track.php', {
-      track: trackData,
-      download_dir: "downloads",
-      filename_tag: "SPOTISAVER",
-      user_ip: userIp,
-      is_premium: false
-    }, {
-      headers: {
-        ...headers,
-        'Content-Type': 'application/json',
-        'Origin': 'https://spotisaver.net'
-      },
-      responseType: 'stream'
-    });
-
-    // 4. Pipe Response
-    const filename = `${trackData.artists.join(', ')} - ${trackData.name}.mp3`.replace(/[^a-z0-9 \.-]/gi, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'audio/mpeg');
 
-    downloadRes.data.pipe(res);
+    // Stream download: -f bestaudio, pipe to stdout
+    // Note: yt-dlp writes to stdout, which we pipe to res
+    const ytDlpProcess = ytDlpWrap.exec([
+      url,
+      '-f', 'bestaudio',
+      '-o', '-'
+    ]);
+
+    ytDlpProcess.on('error', (err) => {
+      console.error("yt-dlp error:", err);
+      if (!res.headersSent) res.status(500).json({ error: "Download process failed", detail: err.message });
+    });
+
+    ytDlpProcess.pipe(res);
 
   } catch (e) {
-    console.error("Download proxy error:", e.message);
-    // Return JSON error even if upstream failed, to avoid "Unexpected token <" in client
+    console.error("Download error:", e.message);
     if (!res.headersSent) {
-      res.status(500).json({ error: "Download failed", detail: e.message || "Could not fetch from Spotisaver." });
+      res.status(500).json({ error: "Download failed", detail: e.message });
     }
   }
 });
 
-app.get("/track/:id", async (req, res) => {
-  try {
-    const token = await getSpotifyToken();
-    const result = await axios.get(`https://api.spotify.com/v1/tracks/${req.params.id}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    res.json(result.data);
-  } catch (e) {
-    res.status(500).json({ error: "Track lookup failed" });
-  }
-});
-
-// Export for Vercel
 // Global Error Handler to force JSON responses
 app.use((err, req, res, next) => {
   console.error("Unhandled Server Error:", err);

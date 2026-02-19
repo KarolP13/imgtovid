@@ -18,6 +18,10 @@
         {
             "source": "/download",
             "destination": "/api/index.js"
+        },
+        {
+            "source": "/proxy-image",
+            "destination": "/api/index.js"
         }
     ],
     "headers": [
