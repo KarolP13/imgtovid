@@ -172,9 +172,18 @@ export default function App() {
 
     try {
       const res = await fetch(`/download?url=${encodeURIComponent(downloadUrl)}`);
+
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail || data.error || 'Download failed');
+        // Try to parse error as JSON, otherwise read text
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          throw new Error(data.detail || data.error || 'Download failed');
+        } else {
+          const text = await res.text();
+          console.error("Non-JSON Error Response:", text);
+          throw new Error(`Server Error (${res.status}): Please check backend logs.`);
+        }
       }
 
       const blob = await res.blob();
@@ -200,6 +209,7 @@ export default function App() {
       setDownloadStatus('done');
       setTimeout(() => setDownloadStatus('idle'), 3000);
     } catch (e) {
+      console.error(e);
       setErrorMsg(e.message);
       setDownloadStatus('error');
     }
