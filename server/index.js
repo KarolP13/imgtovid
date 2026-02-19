@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const path = require('path');
+const fs = require('fs');
 require("dotenv").config();
 
 const app = express();
@@ -71,6 +73,65 @@ app.get("/proxy-audio", async (req, res) => {
   } catch (e) {
     console.error("Proxy Audio Error:", e.message);
     res.status(500).json({ error: "Failed to fetch audio" });
+  }
+});
+
+app.get("/download", async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: "Missing url" });
+
+  try {
+    console.log("Proxying download via Spotisaver:", url);
+
+    // 1. Extract ID
+    const match = url.match(/(?:track\/|spotify:track:)([a-zA-Z0-9]+)/);
+    const id = match ? match[1] : null;
+    if (!id) return res.status(400).json({ error: "Invalid Spotify URL" });
+
+    // 2. Get Metadata from Spotisaver
+    const metaUrl = `https://spotisaver.net/api/get_playlist.php?id=${id}&type=track&lang=en`;
+    const metaRes = await axios.get(metaUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://spotisaver.net/'
+      }
+    });
+
+    if (!metaRes.data || !metaRes.data.tracks || metaRes.data.tracks.length === 0) {
+      throw new Error("Track not found on Spotisaver");
+    }
+
+    const trackData = metaRes.data.tracks[0];
+    const userIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+
+    // 3. Request Download
+    const downloadRes = await axios.post('https://spotisaver.net/api/download_track.php', {
+      track: trackData,
+      download_dir: "downloads",
+      filename_tag: "SPOTISAVER",
+      user_ip: userIp,
+      is_premium: false
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://spotisaver.net/',
+        'Origin': 'https://spotisaver.net'
+      },
+      responseType: 'stream'
+    });
+
+    // 4. Pipe Response
+    const filename = `${trackData.artists.join(', ')} - ${trackData.name}.mp3`.replace(/[^a-z0-9 \.-]/gi, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'audio/mpeg');
+
+    downloadRes.data.pipe(res);
+
+  } catch (e) {
+    console.error("Download proxy error:", e.message);
+    // Fallback or error message
+    res.status(500).json({ error: "Download failed", detail: "Could not fetch from Spotisaver." });
   }
 });
 

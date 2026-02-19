@@ -5,7 +5,7 @@ import './App.css';
 
 export default function App() {
   // Modes: 'spotify' | 'custom'
-  const [appMode, setAppMode] = useState('spotify');
+  const [appMode, setAppMode] = useState('custom');
 
   // Spotify State
   const [query, setQuery] = useState('');
@@ -19,6 +19,10 @@ export default function App() {
   const [customCoverName, setCustomCoverName] = useState('');
   const [customTitle, setCustomTitle] = useState('');
   const [customArtist, setCustomArtist] = useState('');
+
+  // Downloader State
+  const [downloadUrl, setDownloadUrl] = useState('');
+  const [downloadStatus, setDownloadStatus] = useState('idle');
 
   // General State
   const [status, setStatus] = useState('idle');
@@ -161,6 +165,46 @@ export default function App() {
     }
   }
 
+  async function handleDownload() {
+    if (!downloadUrl) return;
+    setDownloadStatus('downloading');
+    setErrorMsg('');
+
+    try {
+      const res = await fetch(`/download?url=${encodeURIComponent(downloadUrl)}`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || data.error || 'Download failed');
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+
+      const disposition = res.headers.get('Content-Disposition');
+      let filename = 'audio.mp3';
+      if (disposition && disposition.indexOf('attachment') !== -1) {
+        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+        const matches = filenameRegex.exec(disposition);
+        if (matches != null && matches[1]) {
+          filename = matches[1].replace(/['"]/g, '');
+        }
+      }
+
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setDownloadStatus('done');
+      setTimeout(() => setDownloadStatus('idle'), 3000);
+    } catch (e) {
+      setErrorMsg(e.message);
+      setDownloadStatus('error');
+    }
+  }
+
   async function generateVideo() {
     if (!ffmpegLoaded) { setErrorMsg('FFmpeg is still loading, please wait.'); setStatus('error'); return; }
 
@@ -264,6 +308,9 @@ export default function App() {
           </button>
           <button className={appMode === 'custom' ? 'active' : ''} onClick={() => { setAppMode('custom'); setErrorMsg(''); }}>
             Custom Creation
+          </button>
+          <button className={appMode === 'downloader' ? 'active' : ''} onClick={() => { setAppMode('downloader'); setErrorMsg(''); }}>
+            MP3 Downloader
           </button>
         </div>
 
@@ -417,6 +464,41 @@ export default function App() {
 
             <section className="generate-section-custom">
               <ActionArea status={status} progress={progress} videoUrl={videoUrl} errorMsg={errorMsg} generateVideo={generateVideo} downloadVideo={downloadVideo} ffmpegLoaded={ffmpegLoaded} onReset={() => { setStatus('idle'); setVideoUrl(null); }} />
+            </section>
+          </div>
+        )}
+
+        {/* DOWNLOADER MODE */}
+        {appMode === 'downloader' && (
+          <div className="wrapper-custom">
+            <section className="custom-form">
+              <h2 className="section-label">MP3 DOWNLOADER</h2>
+              <p style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>Paste a Spotify or SoundCloud link to download the MP3.</p>
+              <div className="input-group">
+                <label>Track Link</label>
+                <input
+                  className="text-input"
+                  placeholder="https://open.spotify.com/track/..."
+                  value={downloadUrl}
+                  onChange={e => setDownloadUrl(e.target.value)}
+                />
+              </div>
+              <div className="action-area" style={{ marginTop: '16px' }}>
+                {downloadStatus !== 'downloading' && (
+                  <button className="generate-btn" onClick={handleDownload} disabled={!downloadUrl}>
+                    {downloadStatus === 'done' ? '✓ Downloaded!' : 'Download MP3'}
+                  </button>
+                )}
+                {downloadStatus === 'downloading' && (
+                  <div className="progress-wrap">
+                    <div className="progress-bar-track">
+                      <div className="progress-bar-fill" style={{ width: `100%`, animation: 'pulse 1.5s infinite' }} />
+                    </div>
+                    <p className="progress-label">Fetching & Converting...</p>
+                  </div>
+                )}
+                {errorMsg && <p className="error-msg">⚠ {errorMsg}</p>}
+              </div>
             </section>
           </div>
         )}
