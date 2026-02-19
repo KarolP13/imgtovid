@@ -509,6 +509,12 @@ export default function App() {
 }
 
 function ActionArea({ status, progress, videoUrl, errorMsg, generateVideo, downloadVideo, ffmpegLoaded, onReset }) {
+  function handleTwitterShare() {
+    const text = `Check out this video I made with CoverClip! 🎵✨ @youtube #MusicVideo`;
+    const url = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text);
+    window.open(url, '_blank');
+  }
+
   return (
     <div className="action-area">
       {(status === 'idle' || status === 'error') && (
@@ -527,7 +533,12 @@ function ActionArea({ status, progress, videoUrl, errorMsg, generateVideo, downl
       {status === 'done' && (
         <div className="done-area">
           <video className="video-preview" src={videoUrl} controls loop />
-          <button className="download-btn" onClick={downloadVideo}>↓ Download MP4</button>
+          <div className="done-actions">
+            <button className="download-btn" onClick={downloadVideo}>↓ Download MP4</button>
+            <button className="twitter-btn" onClick={handleTwitterShare}>
+              🐦 Post to Twitter
+            </button>
+          </div>
           <button className="reset-btn" onClick={onReset}>Reset / New</button>
         </div>
       )}

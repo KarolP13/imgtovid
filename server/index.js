@@ -90,6 +90,8 @@ app.get("/download", async (req, res) => {
 
     // 2. Get Metadata from Spotisaver
     const metaUrl = `https://spotisaver.net/api/get_playlist.php?id=${id}&type=track&lang=en`;
+    console.log(`Fetching metadata from: ${metaUrl}`);
+
     const metaRes = await axios.get(metaUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -98,11 +100,14 @@ app.get("/download", async (req, res) => {
     });
 
     if (!metaRes.data || !metaRes.data.tracks || metaRes.data.tracks.length === 0) {
+      console.error("Spotisaver Metadata Error:", JSON.stringify(metaRes.data));
       throw new Error("Track not found on Spotisaver");
     }
 
     const trackData = metaRes.data.tracks[0];
     const userIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+
+    console.log(`Found track: ${trackData.name} by ${trackData.artists.join(', ')}. Requesting download...`);
 
     // 3. Request Download
     const downloadRes = await axios.post('https://spotisaver.net/api/download_track.php', {
@@ -130,8 +135,12 @@ app.get("/download", async (req, res) => {
 
   } catch (e) {
     console.error("Download proxy error:", e.message);
+    if (e.response) {
+      console.error("Upstream status:", e.response.status);
+      console.error("Upstream data:", e.response.data); // data might be stream, but useful if text
+    }
     // Fallback or error message
-    res.status(500).json({ error: "Download failed", detail: "Could not fetch from Spotisaver." });
+    res.status(500).json({ error: "Download failed", detail: "Could not fetch from Spotisaver. Check server logs." });
   }
 });
 
@@ -153,5 +162,10 @@ module.exports = app;
 // Only listen if run directly
 if (require.main === module) {
   const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`Server running on ${PORT}`);
+    if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) {
+      console.warn("⚠️  WARNING: SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET is missing via .env. Search will fail.");
+    }
+  });
 }
