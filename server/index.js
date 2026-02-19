@@ -27,21 +27,59 @@ async function getSpotifyToken() {
   return tokenCache.token;
 }
 
-app.get("/search", async (req, res) => {
+
+// -- iTunes Fallback Search --
+async function searchItunes(query, limit = 20) {
   try {
-    const { q, type = "track" } = req.query;
-    const limit = 10; // Safer limit to avoid API errors
-    const url = `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=${type}&market=US&limit=${limit}`;
-    console.log(`Searching for "${q}" (limit: ${limit}) URL: ${url}`);
-    const token = await getSpotifyToken();
-    const result = await axios.get(url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    res.json(result.data);
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&limit=${limit}`;
+    const res = await axios.get(url);
+
+    // Map iTunes results to Spotify-like format for frontend compatibility
+    const tracks = res.data.results.map(item => ({
+      id: "itunes-" + item.trackId,
+      name: item.trackName,
+      artists: [{ name: item.artistName }],
+      album: {
+        name: item.collectionName,
+        images: [{ url: item.artworkUrl100?.replace('100x100', '600x600') || item.artworkUrl100 }]
+      },
+      preview_url: item.previewUrl,
+      external_urls: { spotify: item.trackViewUrl } // fallback link
+    }));
+
+    return { tracks: { items: tracks } };
   } catch (e) {
-    console.error("Search error:", e.response?.data || e.message);
-    const detail = e.response?.data?.error?.message || e.message;
-    res.status(500).json({ error: "Search failed", detail });
+    console.error("iTunes search failed:", e.message);
+    throw new Error("All search providers failed.");
+  }
+}
+
+app.get("/search", async (req, res) => {
+  const { q, type = "track" } = req.query;
+  const limit = 20;
+
+  // Try Spotify first
+  if (process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET) {
+    try {
+      const url = `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=${type}&market=US&limit=${limit}`;
+      console.log(`Spotify Search: "${q}"`);
+      const token = await getSpotifyToken();
+      const result = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json(result.data);
+    } catch (e) {
+      console.error("Spotify Search Error (falling back):", e.response?.data || e.message);
+    }
+  } else {
+    console.log("Spotify credentials missing. Using iTunes fallback.");
+  }
+
+  // Fallback to iTunes
+  try {
+    console.log(`iTunes Fallback Search: "${q}"`);
+    const data = await searchItunes(q, limit);
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: "Search failed", detail: "Could not search Spotify or iTunes." });
   }
 });
 
@@ -63,7 +101,7 @@ app.get("/proxy-audio", async (req, res) => {
       return res.status(404).json({ error: "Audio not found" });
     }
 
-    console.log(`Proxy Audio: Found match "${match.trackName}" by ${match.artistName}. Streaming: ${match.previewUrl}`);
+    console.log(`Proxy Audio: Found match "${match.trackName}". Streaming: ${match.previewUrl}`);
 
     // Stream the audio back
     const audioRes = await axios.get(match.previewUrl, { responseType: 'stream' });
@@ -92,12 +130,19 @@ app.get("/download", async (req, res) => {
     const metaUrl = `https://spotisaver.net/api/get_playlist.php?id=${id}&type=track&lang=en`;
     console.log(`Fetching metadata from: ${metaUrl}`);
 
-    const metaRes = await axios.get(metaUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://spotisaver.net/'
-      }
-    });
+    // Pass a real-looking user agent to avoid blocking
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': 'https://spotisaver.net/'
+    };
+
+    const metaRes = await axios.get(metaUrl, { headers });
+
+    // Handle HTML error responses from Spotisaver
+    if (typeof metaRes.data === 'string' && metaRes.data.trim().startsWith('<')) {
+      console.error("Spotisaver returned HTML instead of JSON metadata.");
+      throw new Error("Upstream provider returned an error page.");
+    }
 
     if (!metaRes.data || !metaRes.data.tracks || metaRes.data.tracks.length === 0) {
       console.error("Spotisaver Metadata Error:", JSON.stringify(metaRes.data));
@@ -105,9 +150,9 @@ app.get("/download", async (req, res) => {
     }
 
     const trackData = metaRes.data.tracks[0];
-    const userIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const userIp = '192.168.1.1'; // Mock IP to avoid 127.0.0.1 blocking issues
 
-    console.log(`Found track: ${trackData.name} by ${trackData.artists.join(', ')}. Requesting download...`);
+    console.log(`Found track: ${trackData.name}. Requesting download...`);
 
     // 3. Request Download
     const downloadRes = await axios.post('https://spotisaver.net/api/download_track.php', {
@@ -118,9 +163,8 @@ app.get("/download", async (req, res) => {
       is_premium: false
     }, {
       headers: {
+        ...headers,
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://spotisaver.net/',
         'Origin': 'https://spotisaver.net'
       },
       responseType: 'stream'
@@ -135,12 +179,10 @@ app.get("/download", async (req, res) => {
 
   } catch (e) {
     console.error("Download proxy error:", e.message);
-    if (e.response) {
-      console.error("Upstream status:", e.response.status);
-      console.error("Upstream data:", e.response.data); // data might be stream, but useful if text
+    // Return JSON error even if upstream failed, to avoid "Unexpected token <" in client
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Download failed", detail: e.message || "Could not fetch from Spotisaver." });
     }
-    // Fallback or error message
-    res.status(500).json({ error: "Download failed", detail: "Could not fetch from Spotisaver. Check server logs." });
   }
 });
 
