@@ -14,6 +14,10 @@
         {
             "source": "/proxy-audio",
             "destination": "/api/index.js"
+        },
+        {
+            "source": "/download",
+            "destination": "/api/index.js"
         }
     ],
     "headers": [
