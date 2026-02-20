@@ -197,11 +197,14 @@ app.get("/download", async (req, res) => {
 
     // Stream download: -f bestaudio, pipe to stdout
     // Note: yt-dlp writes to stdout, which we pipe to res
+    // Vercel only allows writing to /tmp, so we must force cache and temp fragments to /tmp
     const ytDlpStream = ytDlpWrap.execStream([
       downloadTarget,
       '-f', 'bestaudio',
       '--no-playlist',
       '--max-downloads', '1',
+      '--cache-dir', '/tmp/yt-dlp-cache',
+      '--paths', 'temp:/tmp',
       '-o', '-'
     ]);
 
