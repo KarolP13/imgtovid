@@ -195,25 +195,43 @@ app.get("/download", async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'audio/mpeg');
 
-    // Stream download: -f bestaudio, pipe to stdout
-    // Note: yt-dlp writes to stdout, which we pipe to res
-    // Vercel only allows writing to /tmp, so we must force cache and temp fragments to /tmp
-    const ytDlpStream = ytDlpWrap.execStream([
-      downloadTarget,
-      '-f', 'bestaudio',
-      '--no-playlist',
-      '--max-downloads', '1',
-      '--cache-dir', '/tmp/yt-dlp-cache',
-      '--paths', 'temp:/tmp',
-      '-o', '-'
-    ]);
+    // Vercel only allows writing to /tmp, and yt-dlp ignores --paths when outputting to stdout
+    // so we must save the full file to /tmp first, then stream it.
+    const tmpFilePath = `/tmp/${Date.now()}_audio.mp3`;
 
-    ytDlpStream.on('error', (err) => {
-      console.error("yt-dlp error:", err);
-      if (!res.headersSent) res.status(500).json({ error: "Download process failed", detail: err.message });
-    });
+    console.log(`Downloading to temp file: ${tmpFilePath}`);
 
-    ytDlpStream.pipe(res);
+    try {
+      await ytDlpWrap.execPromise([
+        downloadTarget,
+        '-f', 'bestaudio',
+        '--no-playlist',
+        '--max-downloads', '1',
+        '--cache-dir', '/tmp/yt-dlp-cache',
+        '--paths', 'temp:/tmp',
+        '-o', tmpFilePath
+      ]);
+
+      console.log("yt-dlp download complete. Streaming to client...");
+
+      const readStream = fs.createReadStream(tmpFilePath);
+      readStream.pipe(res);
+
+      readStream.on('end', () => {
+        fs.unlink(tmpFilePath, (err) => {
+          if (err) console.error("Failed to cleanup temp file:", err);
+        });
+      });
+
+      readStream.on('error', (err) => {
+        console.error("Read stream error:", err);
+        if (!res.headersSent) res.status(500).json({ error: "Failed to stream audio file", detail: err.message });
+      });
+
+    } catch (execErr) {
+      console.error("yt-dlp exec error:", execErr);
+      if (!res.headersSent) res.status(500).json({ error: "Download process failed", detail: execErr.message });
+    }
 
   } catch (e) {
     console.error("Download error:", e.message);
