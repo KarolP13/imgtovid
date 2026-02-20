@@ -251,7 +251,14 @@ app.get("/download", async (req, res) => {
         '--no-cache-dir',
         '--paths', 'temp:/tmp',
         '-o', tmpFilePath
-      ]);
+      ]).catch(execErr => {
+        // execPromise rejects if ANY stderr is written (like warnings) or exit code > 0
+        // If the file exists, the download succeeded despite the warnings (eg. Error 101 or MPEG-TS warning)
+        if (!fs.existsSync(tmpFilePath)) {
+          throw execErr;
+        }
+        console.log("yt-dlp threw a non-fatal warning/error, but mp3 file exists. Proceeding.");
+      });
 
       console.log("yt-dlp download complete. Streaming to client...");
 
@@ -270,26 +277,8 @@ app.get("/download", async (req, res) => {
       });
 
     } catch (execErr) {
-      if (execErr.message && execErr.message.includes('Error code: 101')) {
-        console.log("yt-dlp exited with 101 (Max downloads reached). This is expected. Streaming to client...");
-
-        const readStream = fs.createReadStream(tmpFilePath);
-        readStream.pipe(res);
-
-        readStream.on('end', () => {
-          fs.unlink(tmpFilePath, (err) => {
-            if (err) console.error("Failed to cleanup temp file:", err);
-          });
-        });
-
-        readStream.on('error', (err) => {
-          console.error("Read stream error:", err);
-          if (!res.headersSent) res.status(500).json({ error: "Failed to stream audio file", detail: err.message });
-        });
-      } else {
-        console.error("yt-dlp exec error:", execErr);
-        if (!res.headersSent) res.status(500).json({ error: "Download process failed", detail: execErr.message });
-      }
+      console.error("yt-dlp exec error:", execErr);
+      if (!res.headersSent) res.status(500).json({ error: "Download process failed", detail: execErr.message });
     }
 
   } catch (e) {

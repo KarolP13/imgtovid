@@ -20,6 +20,10 @@
             "destination": "/api/index.js"
         },
         {
+            "source": "/download-high-res-cover",
+            "destination": "/api/index.js"
+        },
+        {
             "source": "/proxy-image",
             "destination": "/api/index.js"
         }
