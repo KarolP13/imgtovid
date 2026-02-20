@@ -199,6 +199,8 @@ app.get("/download", async (req, res) => {
     const ytDlpStream = ytDlpWrap.execStream([
       downloadTarget,
       '-f', 'bestaudio',
+      '--no-playlist',
+      '--max-downloads', '1',
       '-o', '-'
     ]);
 
