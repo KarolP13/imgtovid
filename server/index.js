@@ -142,7 +142,7 @@ app.get("/download", async (req, res) => {
   if (!url) return res.status(400).json({ error: "Missing url" });
 
   try {
-    console.log("Downloading via yt-dlp:", url);
+    console.log("Downloading via yt-dlp for:", url);
     const YTDlpWrap = require('yt-dlp-wrap').default;
 
     // Locate the binary downloaded by postinstall
@@ -157,12 +157,39 @@ app.get("/download", async (req, res) => {
 
     const ytDlpWrap = new YTDlpWrap(binaryPath);
 
-    // Get metadata first to verify and get filename
-    const metadata = await ytDlpWrap.getVideoInfo(url);
-    const title = metadata.title || 'audio';
+    let downloadTarget = url;
+    let title = 'audio';
+
+    // IMPORTANT: Bypass Spotify DRM by searching YouTube for the track instead
+    if (url.includes('spotify.com') || url.includes('spotify:')) {
+      const match = url.match(/(?:track\/|spotify:track:)([a-zA-Z0-9]+)/);
+      const id = match ? match[1] : null;
+      if (id) {
+        try {
+          const token = await getSpotifyToken();
+          const result = await axios.get(`https://api.spotify.com/v1/tracks/${id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const trackData = result.data;
+          title = `${trackData.artists.map(a => a.name).join(', ')} - ${trackData.name}`;
+          downloadTarget = `ytsearch1:${title} audio`;
+          console.log(`Parsed Spotify URL. Target: ${downloadTarget}`);
+        } catch (e) {
+          console.error("Spotify meta error:", e.message);
+          throw new Error("Could not fetch Spotify metadata for this track. Check Spotify credentials.");
+        }
+      } else {
+        throw new Error("Invalid Spotify URL provided.");
+      }
+    } else {
+      // Fallback for non-spotify urls (e.g. Soundcloud)
+      const metadata = await ytDlpWrap.getVideoInfo(url);
+      title = metadata.title || 'audio';
+    }
+
     const filename = `${title}.mp3`.replace(/[^a-z0-9 \.-]/gi, '_');
 
-    console.log(`Found track: ${title}`);
+    console.log(`Starting yt-dlp stream for: ${title}`);
 
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'audio/mpeg');
@@ -170,7 +197,7 @@ app.get("/download", async (req, res) => {
     // Stream download: -f bestaudio, pipe to stdout
     // Note: yt-dlp writes to stdout, which we pipe to res
     const ytDlpProcess = ytDlpWrap.exec([
-      url,
+      downloadTarget,
       '-f', 'bestaudio',
       '-o', '-'
     ]);

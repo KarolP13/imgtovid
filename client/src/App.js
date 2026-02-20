@@ -391,7 +391,23 @@ export default function App() {
                 <section className="generate-section">
                   <h2 className="section-label">SELECTED TRACK</h2>
                   <div className="selected-card">
-                    <img src={selected.album.images[0]?.url} alt={selected.album.name} className="selected-art" />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                      <img src={selected.album.images[0]?.url} alt={selected.album.name} className="selected-art" style={{ width: '100%', height: 'auto' }} />
+                      <button className="text-btn" style={{ fontSize: '11px', padding: '4px' }} onClick={async () => {
+                        try {
+                          const res = await fetch(selected.album.images[0]?.url);
+                          const blob = await res.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${selected.name.replace(/[^a-z0-9]/gi, '_')}_cover.jpg`;
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                        } catch (e) {
+                          console.error("Failed to download cover", e);
+                        }
+                      }}>↓ Download Cover</button>
+                    </div>
                     <div className="selected-details">
                       <h3 className="selected-title">
                         {selected.name}
@@ -533,7 +549,7 @@ export default function App() {
         )}
 
       </main>
-      <div className="version-badge">v1.0.11</div>
+      <div className="version-badge">v1.0.12</div>
     </div>
   );
 }
