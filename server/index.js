@@ -270,8 +270,26 @@ app.get("/download", async (req, res) => {
       });
 
     } catch (execErr) {
-      console.error("yt-dlp exec error:", execErr);
-      if (!res.headersSent) res.status(500).json({ error: "Download process failed", detail: execErr.message });
+      if (execErr.message && execErr.message.includes('Error code: 101')) {
+        console.log("yt-dlp exited with 101 (Max downloads reached). This is expected. Streaming to client...");
+
+        const readStream = fs.createReadStream(tmpFilePath);
+        readStream.pipe(res);
+
+        readStream.on('end', () => {
+          fs.unlink(tmpFilePath, (err) => {
+            if (err) console.error("Failed to cleanup temp file:", err);
+          });
+        });
+
+        readStream.on('error', (err) => {
+          console.error("Read stream error:", err);
+          if (!res.headersSent) res.status(500).json({ error: "Failed to stream audio file", detail: err.message });
+        });
+      } else {
+        console.error("yt-dlp exec error:", execErr);
+        if (!res.headersSent) res.status(500).json({ error: "Download process failed", detail: execErr.message });
+      }
     }
 
   } catch (e) {
