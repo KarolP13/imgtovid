@@ -196,18 +196,18 @@ app.get("/download", async (req, res) => {
 
     // Stream download: -f bestaudio, pipe to stdout
     // Note: yt-dlp writes to stdout, which we pipe to res
-    const ytDlpProcess = ytDlpWrap.exec([
+    const ytDlpStream = ytDlpWrap.execStream([
       downloadTarget,
       '-f', 'bestaudio',
       '-o', '-'
     ]);
 
-    ytDlpProcess.on('error', (err) => {
+    ytDlpStream.on('error', (err) => {
       console.error("yt-dlp error:", err);
       if (!res.headersSent) res.status(500).json({ error: "Download process failed", detail: err.message });
     });
 
-    ytDlpProcess.pipe(res);
+    ytDlpStream.pipe(res);
 
   } catch (e) {
     console.error("Download error:", e.message);
