@@ -238,9 +238,10 @@ app.get("/download", async (req, res) => {
 
     // Vercel only allows writing to /tmp, and yt-dlp ignores --paths when outputting to stdout
     // so we must save the full file to /tmp first, then stream it.
-    const tmpFilePath = `/tmp/${Date.now()}_audio.mp3`;
+    const tmpBaseName = `${Date.now()}_audio`;
+    const tmpFilePathBase = `/tmp/${tmpBaseName}`;
 
-    console.log(`Downloading to temp file: ${tmpFilePath}`);
+    console.log(`Downloading to temp file prefix: ${tmpFilePathBase}`);
 
     try {
       await ytDlpWrap.execPromise([
@@ -249,24 +250,34 @@ app.get("/download", async (req, res) => {
         '--no-playlist',
         '--max-downloads', '1',
         '--no-cache-dir',
-        '--paths', 'temp:/tmp',
-        '-o', tmpFilePath
+        '--output', `${tmpFilePathBase}.%(ext)s`
       ]).catch(execErr => {
-        // execPromise rejects if ANY stderr is written (like warnings) or exit code > 0
-        // If the file exists, the download succeeded despite the warnings (eg. Error 101 or MPEG-TS warning)
-        if (!fs.existsSync(tmpFilePath)) {
+        // Ignored warning check: if any file starting with our prefix exists in /tmp, download succeeded.
+        const files = fs.readdirSync('/tmp/');
+        const exists = files.some(f => f.startsWith(tmpBaseName) && !f.endsWith('.part'));
+        if (!exists) {
           throw execErr;
         }
-        console.log("yt-dlp threw a non-fatal warning/error, but mp3 file exists. Proceeding.");
+        console.log("yt-dlp threw a non-fatal warning, but file exists. Proceeding.");
       });
 
-      console.log("yt-dlp download complete. Streaming to client...");
+      console.log("yt-dlp download complete. Locating output file...");
 
-      const readStream = fs.createReadStream(tmpFilePath);
+      const tmpFiles = fs.readdirSync('/tmp/');
+      const actualFilename = tmpFiles.find(f => f.startsWith(tmpBaseName) && !f.endsWith('.part') && !f.endsWith('.ytdl'));
+
+      if (!actualFilename) {
+        throw new Error("Download completed but no final audio file was found in /tmp!");
+      }
+
+      const finalPath = path.join('/tmp', actualFilename);
+      console.log(`Found actual streamable file: ${finalPath}`);
+
+      const readStream = fs.createReadStream(finalPath);
       readStream.pipe(res);
 
       readStream.on('end', () => {
-        fs.unlink(tmpFilePath, (err) => {
+        fs.unlink(finalPath, (err) => {
           if (err) console.error("Failed to cleanup temp file:", err);
         });
       });
