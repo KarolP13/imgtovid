@@ -136,6 +136,47 @@ app.get("/proxy-image", async (req, res) => {
     res.status(500).send("Failed to fetch image");
   }
 });
+// Download high-resolution 4K covers via iTunes Search API
+app.get("/download-high-res-cover", async (req, res) => {
+  const { artist, track, url } = req.query;
+  try {
+    let targetUrl = url;
+
+    // We can try to get the 4K version if artist and track are provided
+    if (artist && track) {
+      console.log(`4K Cover requested for: "${artist} - ${track}"`);
+      const searchUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artist + " " + track)}&media=music&limit=1`;
+      const searchRes = await axios.get(searchUrl);
+
+      if (searchRes.data.results && searchRes.data.results.length > 0) {
+        const item = searchRes.data.results[0];
+        if (item.artworkUrl100) {
+          targetUrl = item.artworkUrl100.replace('100x100bb', '10000x10000bb');
+          console.log(`Found 4K iTunes artwork: ${targetUrl}`);
+        }
+      }
+    }
+
+    if (!targetUrl) return res.status(400).send("No image URL could be resolved.");
+
+    // Fetch the image as a stream
+    const response = await axios.get(targetUrl, { responseType: 'stream' });
+
+    // Determine a filename
+    const cleanName = `${artist || 'unknown'}_${track || 'cover'}`.replace(/[^a-z0-9]/gi, '_');
+    const filename = `${cleanName}_4k.jpg`;
+
+    res.setHeader('Content-Type', response.headers['content-type'] || 'image/jpeg');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    response.data.pipe(res);
+  } catch (e) {
+    console.error("4K Cover Error:", e.message);
+    res.status(500).json({ error: "Failed to fetch high-res cover" });
+  }
+});
 
 app.get("/download", async (req, res) => {
   const { url } = req.query;
@@ -207,7 +248,7 @@ app.get("/download", async (req, res) => {
         '-f', 'bestaudio',
         '--no-playlist',
         '--max-downloads', '1',
-        '--cache-dir', '/tmp/yt-dlp-cache',
+        '--no-cache-dir',
         '--paths', 'temp:/tmp',
         '-o', tmpFilePath
       ]);

@@ -395,18 +395,14 @@ export default function App() {
                       <img src={selected.album.images[0]?.url} alt={selected.album.name} className="selected-art" style={{ width: '100%', height: 'auto' }} />
                       <button className="text-btn" style={{ fontSize: '11px', padding: '4px' }} onClick={async () => {
                         try {
-                          const res = await fetch(selected.album.images[0]?.url);
-                          const blob = await res.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `${selected.name.replace(/[^a-z0-9]/gi, '_')}_cover.jpg`;
-                          a.click();
-                          window.URL.revokeObjectURL(url);
+                          const artistName = selected.artists[0]?.name || '';
+                          const trackName = selected.name || '';
+                          const fallbackUrl = selected.album.images[0]?.url || '';
+                          window.location.href = `/download-high-res-cover?artist=${encodeURIComponent(artistName)}&track=${encodeURIComponent(trackName)}&url=${encodeURIComponent(fallbackUrl)}`;
                         } catch (e) {
                           console.error("Failed to download cover", e);
                         }
-                      }}>↓ Download Cover</button>
+                      }}>↓ Download 4K Cover</button>
                     </div>
                     <div className="selected-details">
                       <h3 className="selected-title">
@@ -549,7 +545,7 @@ export default function App() {
         )}
 
       </main>
-      <div className="version-badge">v1.0.17</div>
+      <div className="version-badge">v1.0.18</div>
     </div>
   );
 }
