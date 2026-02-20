@@ -172,7 +172,8 @@ app.get("/download", async (req, res) => {
           });
           const trackData = result.data;
           title = `${trackData.artists.map(a => a.name).join(', ')} - ${trackData.name}`;
-          downloadTarget = `ytsearch1:${title} audio`;
+          // Use SoundCloud search to avoid YouTube blocking Vercel server IPs
+          downloadTarget = `scsearch1:${title}`;
           console.log(`Parsed Spotify URL. Target: ${downloadTarget}`);
         } catch (e) {
           console.error("Spotify meta error:", e.message);
