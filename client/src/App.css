@@ -742,12 +742,40 @@ body {
     padding: 16px 20px;
   }
 
+  .header-inner {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tagline {
+    text-align: center;
+  }
+
   .main {
     padding: 24px 20px 60px;
   }
 
   .tracks-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .custom-media-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .done-actions {
+    flex-direction: column;
+  }
+
+  .mode-switch {
+    width: 100%;
+    display: flex;
+  }
+
+  .mode-switch button {
+    flex: 1;
+    padding: 10px 0;
   }
 }
 
