@@ -356,6 +356,15 @@ app.get("/download", async (req, res) => {
             }
           }
 
+          // Quality Confidence Threshold Check
+          // If the best score is less than 0, it means EVERY track in the top 10 was heavily penalized 
+          // (e.g. they were all Live versions, remixed, or severely duration-mismatched).
+          // We should reject the download rather than giving the user a fan edit.
+          if (bestScore < 0) {
+            console.log(`Smart Search Rejected: Best candidate "${bestResult.title}" had failing score of ${bestScore}`);
+            throw new Error("No clean studio version of this track exists on SoundCloud. All available results are live performances, remixes, or fan edits.");
+          }
+
           downloadTarget = bestResult.url || bestResult.webpage_url;
           title = bestResult.title || title; // Update title to actual downloaded track
 
