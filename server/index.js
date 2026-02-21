@@ -371,6 +371,9 @@ app.get("/download", async (req, res) => {
           console.log(`Smart Search Selected: ${title} (Score: ${bestScore}) -> ${downloadTarget}`);
         } catch (e) {
           console.error("Spotify meta error:", e.message);
+          if (e.message.includes("No clean studio version") || e.message.includes("No SoundCloud results found")) {
+            throw new Error(e.message); // Preserve algorithm rejection message
+          }
           throw new Error("Could not fetch Spotify metadata for this track. Check Spotify credentials.");
         }
       } else {
