@@ -283,10 +283,10 @@ export default function App() {
       await ffmpeg.writeFile(`audio.${ext}`, await fetchFile(audioBlob));
 
       await ffmpeg.exec([
-        '-loop', '1', '-i', 'cover.jpg', '-i', `audio.${ext}`,
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'stillimage', '-crf', '23',
+        '-loop', '1', '-framerate', '1', '-i', 'cover.jpg', '-i', `audio.${ext}`,
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'stillimage', '-crf', '23', '-r', '1',
         '-c:a', 'aac', '-b:a', '128k', '-pix_fmt', 'yuv420p',
-        '-vf', 'scale=720:720:force_original_aspect_ratio=decrease,pad=720:720:(ow-iw)/2:(oh-ih)/2:black',
+        '-vf', 'scale=720:720:force_original_aspect_ratio=increase,crop=720:720',
         '-shortest', 'output.mp4'
       ]);
 
@@ -544,7 +544,7 @@ export default function App() {
         )}
 
       </main>
-      <div className="version-badge">v1.0.23</div>
+      <div className="version-badge">v1.0.24</div>
     </div>
   );
 }
