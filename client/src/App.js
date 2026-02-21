@@ -514,7 +514,10 @@ export default function App() {
           <div className="wrapper-custom">
             <section className="custom-form">
               <h2 className="section-label">MP3 DOWNLOADER</h2>
-              <p style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>Paste a Spotify or SoundCloud link to download the MP3.</p>
+              <p style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
+                Paste a SoundCloud, Spotify, or YouTube link to download the MP3.<br /><br />
+                <span style={{ color: '#999' }}>* Works best natively with <b>SoundCloud</b>. <b>Spotify</b> links are supported by automatically matching your track to public audio databases. <b>YouTube</b> links are supported but may occasionally face server blocks.</span>
+              </p>
               <div className="input-group">
                 <label>Track Link</label>
                 <input
@@ -552,7 +555,7 @@ export default function App() {
           </div>
         )}
       </main>
-      <div className="version-badge">v1.0.35</div>
+      <div className="version-badge">v1.0.36</div>
     </div>
   );
 }
