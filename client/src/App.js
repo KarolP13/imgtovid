@@ -542,16 +542,15 @@ export default function App() {
             </section>
           </div>
         )}
-
       </main>
-      <div className="version-badge">v1.0.24</div>
+      <div className="version-badge">v1.0.26</div>
     </div>
   );
 }
 
 function ActionArea({ status, progress, videoUrl, errorMsg, generateVideo, downloadVideo, ffmpegLoaded, onReset }) {
   function handleTwitterShare() {
-    const text = `Check out this video I made with CoverClip! 🎵✨ @youtube #MusicVideo`;
+    const text = `@youtube`;
     const url = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(text);
     window.open(url, '_blank');
   }
