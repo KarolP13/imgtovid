@@ -161,12 +161,19 @@ app.get("/download-high-res-cover", async (req, res) => {
         // If we have an album name, try to find the exact matching collection to avoid Deluxe/Compilation mixups
         if (album) {
           const albumLower = album.toLowerCase();
+
           const perfectMatch = searchRes.data.results.find(r => r.collectionName && r.collectionName.toLowerCase() === albumLower);
 
           if (perfectMatch) {
             bestItem = perfectMatch;
           } else {
-            const partialMatch = searchRes.data.results.find(r => r.collectionName && r.collectionName.toLowerCase().includes(albumLower));
+            // Aggressive bidirectional fuzzy match: Strip non-alphanumeric chars
+            const cleanAlb = albumLower.replace(/[^a-z0-9]/g, '');
+            const partialMatch = searchRes.data.results.find(r => {
+              if (!r.collectionName) return false;
+              const cleanCol = r.collectionName.toLowerCase().replace(/[^a-z0-9]/g, '');
+              return cleanCol.includes(cleanAlb) || cleanAlb.includes(cleanCol);
+            });
             if (partialMatch) bestItem = partialMatch;
           }
         }
