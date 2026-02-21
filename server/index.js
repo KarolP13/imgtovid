@@ -294,9 +294,9 @@ app.get("/download", async (req, res) => {
           const trackData = result.data;
           title = `${trackData.artists.map(a => a.name).join(', ')} - ${trackData.name}`;
 
-          console.log(`Searching SoundCloud for top 3 results for: ${title}`);
+          console.log(`Searching SoundCloud for top 10 results for: ${title}`);
           const searchMetadataStr = await ytDlpWrap.execPromise([
-            `scsearch3:${title}`,
+            `scsearch10:${title}`,
             '--dump-json',
             '--flat-playlist',
             '--cache-dir', '/tmp/yt-dlp-cache'
@@ -312,26 +312,44 @@ app.get("/download", async (req, res) => {
 
           // Smart Ranking Algorithm
           // We want the studio version, not a live cover.
-          const badKeywords = ['live', 'cover', 'session', 'remix', 'instrumental', 'karaoke', 'acoustic', 'slowed', 'reverb', 'sped up'];
+          const badKeywords = ['live', 'cover', 'session', 'remix', 'instrumental', 'karaoke', 'acoustic', 'slowed', 'reverb', 'sped up', 'type beat', '8d', 'mashup', 'rough', 'flip', 'edit', 'mix'];
 
           let bestResult = results[0];
           let bestScore = -1000;
 
+          const officialArtistLower = trackData.artists[0].name.toLowerCase();
+          const trackNameLower = trackData.name.toLowerCase();
+          const officialDurationSec = trackData.duration_ms / 1000;
+
           for (const res of results) {
             let score = 0;
             const resTitle = (res.title || '').toLowerCase();
+            const resUploader = (res.uploader || '').toLowerCase();
+            const resDuration = res.duration || 0; // yt-dlp flat-playlist duration is in seconds
 
-            // Penalize bad keywords
+            // Penalize bad keywords heavily (unless the official track name already has it, like a remix)
             badKeywords.forEach(kw => {
-              if (resTitle.includes(kw)) score -= 100;
+              if (resTitle.includes(kw) && !trackNameLower.includes(kw)) score -= 200;
             });
 
             // Reward exact title matches
-            if (resTitle.includes(trackData.name.toLowerCase())) score += 50;
-            if (resTitle.includes(trackData.artists[0].name.toLowerCase())) score += 50;
+            if (resTitle.includes(trackNameLower)) score += 50;
+            if (resTitle.includes(officialArtistLower)) score += 50;
 
-            // Reward official accounts (SoundCloud usually flags pro accounts with more followers/verified, but we can't easily see that here)
-            // Just rely on title cleanliness
+            // Reward official accounts: Does the uploader name exactly match the Spotify artist?
+            if (resUploader.includes(officialArtistLower) || officialArtistLower.includes(resUploader)) {
+              score += 150;
+            }
+
+            // Duration check: Penalize heavily if the lengths don't match (prevents downloading 1h mixes or loop videos)
+            // Allow a 15 second tolerance for intro/outro padding
+            if (resDuration > 0 && officialDurationSec > 0) {
+              const diff = Math.abs(resDuration - officialDurationSec);
+              if (diff <= 5) score += 100; // Perfect match
+              else if (diff <= 15) score += 50; // Close match
+              else score -= (diff * 2); // Heavy penalty for large deviations
+            }
+
             if (score > bestScore) {
               bestScore = score;
               bestResult = res;
