@@ -396,8 +396,9 @@ export default function App() {
                         try {
                           const artistName = selected.artists[0]?.name || '';
                           const trackName = selected.name || '';
+                          const albumName = selected.album?.name || '';
                           const fallbackUrl = selected.album.images[0]?.url || '';
-                          window.location.href = `/download-high-res-cover?artist=${encodeURIComponent(artistName)}&track=${encodeURIComponent(trackName)}&url=${encodeURIComponent(fallbackUrl)}`;
+                          window.location.href = `/download-high-res-cover?artist=${encodeURIComponent(artistName)}&track=${encodeURIComponent(trackName)}&album=${encodeURIComponent(albumName)}&url=${encodeURIComponent(fallbackUrl)}`;
                         } catch (e) {
                           console.error("Failed to download cover", e);
                         }
@@ -551,7 +552,7 @@ export default function App() {
           </div>
         )}
       </main>
-      <div className="version-badge">v1.0.28</div>
+      <div className="version-badge">v1.0.29</div>
     </div>
   );
 }

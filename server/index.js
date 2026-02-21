@@ -138,21 +138,42 @@ app.get("/proxy-image", async (req, res) => {
 });
 // Download high-resolution 4K covers via iTunes Search API
 app.get("/download-high-res-cover", async (req, res) => {
-  const { artist, track, url } = req.query;
+  const { artist, track, album, url } = req.query;
   try {
     let targetUrl = url;
 
     // We can try to get the 4K version if artist and track are provided
     if (artist && track) {
-      console.log(`4K Cover requested for: "${artist} - ${track}"`);
-      const searchUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artist + " " + track)}&media=music&limit=1`;
-      const searchRes = await axios.get(searchUrl);
+      console.log(`4K Cover requested for: "${artist} - ${track}" (Album: "${album || 'None'}")`);
+
+      let searchUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artist + " " + track + (album ? " " + album : ""))}&media=music&limit=5`;
+      let searchRes = await axios.get(searchUrl);
+
+      // If no results with album, fallback to just artist and track
+      if (!searchRes.data.results || searchRes.data.results.length === 0) {
+        searchUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(artist + " " + track)}&media=music&limit=5`;
+        searchRes = await axios.get(searchUrl);
+      }
 
       if (searchRes.data.results && searchRes.data.results.length > 0) {
-        const item = searchRes.data.results[0];
-        if (item.artworkUrl100) {
-          targetUrl = item.artworkUrl100.replace('100x100bb', '10000x10000bb');
-          console.log(`Found 4K iTunes artwork: ${targetUrl}`);
+        let bestItem = searchRes.data.results[0]; // Default to top result
+
+        // If we have an album name, try to find the exact matching collection to avoid Deluxe/Compilation mixups
+        if (album) {
+          const albumLower = album.toLowerCase();
+          const perfectMatch = searchRes.data.results.find(r => r.collectionName && r.collectionName.toLowerCase() === albumLower);
+
+          if (perfectMatch) {
+            bestItem = perfectMatch;
+          } else {
+            const partialMatch = searchRes.data.results.find(r => r.collectionName && r.collectionName.toLowerCase().includes(albumLower));
+            if (partialMatch) bestItem = partialMatch;
+          }
+        }
+
+        if (bestItem.artworkUrl100) {
+          targetUrl = bestItem.artworkUrl100.replace('100x100bb', '10000x10000bb');
+          console.log(`Found 4K iTunes artwork for collection "${bestItem.collectionName}": ${targetUrl}`);
         }
       }
     }
@@ -195,10 +216,11 @@ app.get("/extract-cover", async (req, res) => {
         const trackData = result.data;
         const artist = trackData.artists[0]?.name || '';
         const trackName = trackData.name || '';
+        const albumName = trackData.album?.name || '';
         const fallbackUrl = trackData.album.images[0]?.url || '';
 
         // Redirect to our 4K cover finder
-        return res.redirect(`/download-high-res-cover?artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(trackName)}&url=${encodeURIComponent(fallbackUrl)}`);
+        return res.redirect(`/download-high-res-cover?artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(trackName)}&album=${encodeURIComponent(albumName)}&url=${encodeURIComponent(fallbackUrl)}`);
       }
     } else {
       // Fallback: use yt-dlp to get thumbnail
