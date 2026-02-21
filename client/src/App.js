@@ -523,11 +523,19 @@ export default function App() {
                   onChange={e => setDownloadUrl(e.target.value)}
                 />
               </div>
-              <div className="action-area" style={{ marginTop: '16px' }}>
+              <div className="action-area" style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
                 {downloadStatus !== 'downloading' && (
-                  <button className="generate-btn" onClick={handleDownload} disabled={!downloadUrl}>
-                    {downloadStatus === 'done' ? '✓ Downloaded!' : 'Download MP3'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button className="generate-btn" onClick={handleDownload} disabled={!downloadUrl}>
+                      {downloadStatus === 'done' ? '✓ Downloaded!' : 'Download MP3'}
+                    </button>
+                    <button className="text-btn" onClick={() => {
+                      if (!downloadUrl) return;
+                      window.location.href = `/extract-cover?url=${encodeURIComponent(downloadUrl)}`;
+                    }} disabled={!downloadUrl} style={{ background: 'transparent', color: '#fff', border: '1px solid #333', padding: '12px 24px', borderRadius: '4px', cursor: downloadUrl ? 'pointer' : 'not-allowed', opacity: downloadUrl ? 1 : 0.5 }}>
+                      Download Cover
+                    </button>
+                  </div>
                 )}
                 {downloadStatus === 'downloading' && (
                   <div className="progress-wrap">
@@ -543,7 +551,7 @@ export default function App() {
           </div>
         )}
       </main>
-      <div className="version-badge">v1.0.27</div>
+      <div className="version-badge">v1.0.28</div>
     </div>
   );
 }

@@ -178,6 +178,57 @@ app.get("/download-high-res-cover", async (req, res) => {
   }
 });
 
+// Extract cover image from any Spotify or SoundCloud URL
+app.get("/extract-cover", async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: "Missing url" });
+
+  try {
+    if (url.includes('spotify.com') || url.includes('spotify:')) {
+      const match = url.match(/(?:track\/|spotify:track:)([a-zA-Z0-9]+)/);
+      const id = match ? match[1] : null;
+      if (id) {
+        const token = await getSpotifyToken();
+        const result = await axios.get(`https://api.spotify.com/v1/tracks/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const trackData = result.data;
+        const artist = trackData.artists[0]?.name || '';
+        const trackName = trackData.name || '';
+        const fallbackUrl = trackData.album.images[0]?.url || '';
+
+        // Redirect to our 4K cover finder
+        return res.redirect(`/download-high-res-cover?artist=${encodeURIComponent(artist)}&track=${encodeURIComponent(trackName)}&url=${encodeURIComponent(fallbackUrl)}`);
+      }
+    } else {
+      // Fallback: use yt-dlp to get thumbnail
+      const YTDlpWrap = require('yt-dlp-wrap').default;
+      const binaryPath = path.resolve(__dirname, '..', 'yt-dlp');
+      const ytDlpWrap = new YTDlpWrap(binaryPath);
+
+      const metadataStr = await ytDlpWrap.execPromise([url, '--dump-json', '--no-playlist']);
+      const metadata = JSON.parse(metadataStr);
+
+      if (metadata.thumbnail) {
+        const cleanName = (metadata.title || 'cover').replace(/[^a-z0-9]/gi, '_');
+        const filename = `${cleanName}_cover.jpg`;
+
+        const response = await axios.get(metadata.thumbnail, { responseType: 'stream' });
+        res.setHeader('Content-Type', response.headers['content-type'] || 'image/jpeg');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return response.data.pipe(res);
+      } else {
+        return res.status(404).json({ error: "No thumbnail found for this URL" });
+      }
+    }
+  } catch (e) {
+    console.error("Extract Cover Error:", e.message);
+    res.status(500).json({ error: "Failed to extract cover" });
+  }
+});
+
 app.get("/download", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "Missing url" });

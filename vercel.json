@@ -24,6 +24,10 @@
             "destination": "/api/index.js"
         },
         {
+            "source": "/extract-cover",
+            "destination": "/api/index.js"
+        },
+        {
             "source": "/proxy-image",
             "destination": "/api/index.js"
         }
