@@ -307,7 +307,7 @@ app.get("/download", async (req, res) => {
           }).filter(Boolean);
 
           if (results.length === 0) {
-            throw new Error("No SoundCloud results found.");
+            throw new Error("No matching audio found in the database. (Track might be unreleased or region-locked)");
           }
 
           // Smart Ranking Algorithm
@@ -362,7 +362,7 @@ app.get("/download", async (req, res) => {
           // We should reject the download rather than giving the user a fan edit.
           if (bestScore < 0) {
             console.log(`Smart Search Rejected: Best candidate "${bestResult.title}" had failing score of ${bestScore}`);
-            throw new Error("No clean studio version of this track exists on SoundCloud. All available results are live performances, remixes, or fan edits.");
+            throw new Error("No clean studio version of this track exists in the public audio database. Only live performances or fan remixes are available.");
           }
 
           downloadTarget = bestResult.url || bestResult.webpage_url;
@@ -371,7 +371,7 @@ app.get("/download", async (req, res) => {
           console.log(`Smart Search Selected: ${title} (Score: ${bestScore}) -> ${downloadTarget}`);
         } catch (e) {
           console.error("Spotify meta error:", e.message);
-          if (e.message.includes("No clean studio version") || e.message.includes("No SoundCloud results found")) {
+          if (e.message.includes("database") || e.message.includes("clean studio version") || e.message.includes("No matching audio")) {
             throw new Error(e.message); // Preserve algorithm rejection message
           }
           throw new Error("Could not fetch Spotify metadata for this track. Check Spotify credentials.");
