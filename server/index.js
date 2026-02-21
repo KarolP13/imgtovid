@@ -213,9 +213,55 @@ app.get("/download", async (req, res) => {
           });
           const trackData = result.data;
           title = `${trackData.artists.map(a => a.name).join(', ')} - ${trackData.name}`;
-          // Use SoundCloud search to avoid YouTube bot blocks, using /tmp cache for client ID
-          downloadTarget = `scsearch1:${title}`;
-          console.log(`Parsed Spotify URL. Target: ${downloadTarget}`);
+
+          console.log(`Searching SoundCloud for top 5 results for: ${title}`);
+          const searchMetadataStr = await ytDlpWrap.execPromise([
+            `scsearch5:${title}`,
+            '--dump-json',
+            '--no-playlist',
+            '--cache-dir', '/tmp/yt-dlp-cache'
+          ]);
+
+          const results = searchMetadataStr.split('\n').filter(line => line.trim()).map(line => {
+            try { return JSON.parse(line); } catch (e) { return null; }
+          }).filter(Boolean);
+
+          if (results.length === 0) {
+            throw new Error("No SoundCloud results found.");
+          }
+
+          // Smart Ranking Algorithm
+          // We want the studio version, not a live cover.
+          const badKeywords = ['live', 'cover', 'session', 'remix', 'instrumental', 'karaoke', 'acoustic', 'slowed', 'reverb', 'sped up'];
+
+          let bestResult = results[0];
+          let bestScore = -1000;
+
+          for (const res of results) {
+            let score = 0;
+            const resTitle = (res.title || '').toLowerCase();
+
+            // Penalize bad keywords
+            badKeywords.forEach(kw => {
+              if (resTitle.includes(kw)) score -= 100;
+            });
+
+            // Reward exact title matches
+            if (resTitle.includes(trackData.name.toLowerCase())) score += 50;
+            if (resTitle.includes(trackData.artists[0].name.toLowerCase())) score += 50;
+
+            // Reward official accounts (SoundCloud usually flags pro accounts with more followers/verified, but we can't easily see that here)
+            // Just rely on title cleanliness
+            if (score > bestScore) {
+              bestScore = score;
+              bestResult = res;
+            }
+          }
+
+          downloadTarget = bestResult.webpage_url;
+          title = bestResult.title || title; // Update title to actual downloaded track
+
+          console.log(`Smart Search Selected: ${title} (Score: ${bestScore}) -> ${downloadTarget}`);
         } catch (e) {
           console.error("Spotify meta error:", e.message);
           throw new Error("Could not fetch Spotify metadata for this track. Check Spotify credentials.");
