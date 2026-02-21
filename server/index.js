@@ -214,11 +214,11 @@ app.get("/download", async (req, res) => {
           const trackData = result.data;
           title = `${trackData.artists.map(a => a.name).join(', ')} - ${trackData.name}`;
 
-          console.log(`Searching SoundCloud for top 5 results for: ${title}`);
+          console.log(`Searching SoundCloud for top 3 results for: ${title}`);
           const searchMetadataStr = await ytDlpWrap.execPromise([
-            `scsearch5:${title}`,
+            `scsearch3:${title}`,
             '--dump-json',
-            '--no-playlist',
+            '--flat-playlist',
             '--cache-dir', '/tmp/yt-dlp-cache'
           ]);
 
@@ -258,7 +258,7 @@ app.get("/download", async (req, res) => {
             }
           }
 
-          downloadTarget = bestResult.webpage_url;
+          downloadTarget = bestResult.url || bestResult.webpage_url;
           title = bestResult.title || title; // Update title to actual downloaded track
 
           console.log(`Smart Search Selected: ${title} (Score: ${bestScore}) -> ${downloadTarget}`);
