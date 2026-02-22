@@ -190,12 +190,60 @@ export default function App() {
     setErrorMsg('');
 
     try {
+      const isYouTube = downloadUrl.includes('youtube.com') || downloadUrl.includes('youtu.be');
+
+      // 1. Client-Side Cobalt Fetch (Bypasses YouTube Datacenter IP Bans natively)
+      if (isYouTube) {
+        try {
+          console.log("Fetching directly from Cobalt API for YouTube link...");
+          const cobaltRes = await fetch('https://cobalt-production-37d8.up.railway.app/', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              url: downloadUrl,
+              downloadMode: downloadFormat === 'video' ? 'auto' : 'audio'
+            })
+          });
+
+          if (!cobaltRes.ok) {
+            console.warn(`Cobalt returned ${cobaltRes.status}, throwing to backend fallback...`);
+            throw new Error(`Cobalt returned ${cobaltRes.status}`);
+          }
+
+          const cobaltData = await cobaltRes.json();
+          // Cobalt Responses typically have either 'url' string or a status object with 'url'
+          if (cobaltData.url) {
+            console.log("Received Direct Cobalt URL from client-side fetch:", cobaltData.url);
+            const a = document.createElement('a');
+            a.href = cobaltData.url;
+            a.download = `download.${downloadFormat === 'video' ? 'mp4' : 'mp3'}`;
+            a.target = '_self'; // Target _self initiates native OS downloads cleanly
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            setDownloadStatus('done');
+            setTimeout(() => setDownloadStatus('idle'), 3000);
+            return; // Exit here. Do not execute the backend hit!
+          } else {
+            console.warn("Cobalt returned success but no recognizable 'url' property, falling back to backend...", cobaltData);
+          }
+        } catch (cobaltErr) {
+          console.error("Direct Cobalt fetch failed, executing fallback to backend yt-dlp:", cobaltErr);
+        }
+      }
+
+      // 2. Fallback Backend Proxy (yt-dlp stream from /download)
       const res = await fetch(`/download?url=${encodeURIComponent(downloadUrl)}&format=${downloadFormat}`);
+      const contentType = res.headers.get("content-type");
+      const isJson = contentType && contentType.includes("application/json");
 
       if (!res.ok) {
-        // Try to parse error as JSON, otherwise read text
-        const contentType = res.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
+        // Handle explicit server errors mapped via JSON or plaintext
+        if (isJson) {
           const data = await res.json();
           throw new Error(data.detail || data.error || 'Download failed');
         } else {
@@ -205,10 +253,11 @@ export default function App() {
         }
       }
 
+      // If it's not JSON, it's a native binary stream (yt-dlp fallback). Parse it as a Blob.
       const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
+      const blobUrl = window.URL.createObjectURL(blob);
+      const tempLink = document.createElement('a');
+      tempLink.href = blobUrl;
 
       const disposition = res.headers.get('Content-Disposition');
       let filename = downloadFormat === 'video' ? 'video.mp4' : 'audio.mp3';
@@ -220,11 +269,12 @@ export default function App() {
         }
       }
 
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      tempLink.download = filename;
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      window.URL.revokeObjectURL(blobUrl);
+      document.body.removeChild(tempLink);
+
       setDownloadStatus('done');
       setTimeout(() => setDownloadStatus('idle'), 3000);
     } catch (e) {
@@ -515,6 +565,9 @@ export default function App() {
           <div className="wrapper-custom">
             <section className="custom-form">
               <h2 className="section-label">MP3 DOWNLOADER</h2>
+              <div style={{ position: 'fixed', bottom: '10px', right: '10px', color: '#666', fontSize: '12px' }}>
+                v1.0.44
+              </div>
               <p style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
                 Paste a SoundCloud, Spotify, or YouTube link to download the MP3.<br /><br />
                 <span style={{ color: '#999' }}>* Works best natively with <b>SoundCloud</b>. <b>Spotify</b> links are supported by automatically matching your track to public audio databases. <b>YouTube</b> links are supported but may occasionally face server blocks.</span>

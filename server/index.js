@@ -265,68 +265,6 @@ app.get("/extract-cover", async (req, res) => {
 });
 
 // --- Self-Hosted Cobalt API Helper ---
-async function fetchFromCobalt(youtubeUrl, format = 'audio') {
-  const cobaltUrlRaw = process.env.COBALT_API_URL;
-  if (!cobaltUrlRaw) return null;
-
-  // Formatting endpoint logic to support both exact endpoints or bare domains.
-  let cobaltUrl = cobaltUrlRaw;
-  if (!cobaltUrl.endsWith('/api/json') && !cobaltUrl.endsWith('/')) {
-    cobaltUrl += '/'; // Ensure trailing slash if it's a bare domain
-  }
-
-  console.log(`[Cobalt] Initializing YouTube extraction via Cobalt for: ${youtubeUrl} (Format: ${format})`);
-  console.log(`[Cobalt] POSTing to endpoint: ${cobaltUrl}`);
-
-  try {
-    const res = await axios.post(
-      cobaltUrl,
-      {
-        url: youtubeUrl,
-        downloadMode: format === 'video' ? 'auto' : 'audio'
-      },
-      {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000 // 10 second timeout strictly enforced
-      }
-    );
-
-    console.log(`[Cobalt] HTTP Status Code: ${res.status}`);
-    console.log(`[Cobalt] Full JSON Response Body:`, JSON.stringify(res.data, null, 2));
-
-    const data = res.data;
-
-    // Cobalt Responses: { status: 'redirect' | 'stream' | 'tunnel' | 'error' | 'picker', url?: string }
-    if (data.status === 'error' || data.status === 'picker') {
-      console.warn(`[Cobalt] API returned unusable status: ${data.status}`);
-      return null;
-    }
-
-    if (data.status === 'redirect' || data.status === 'stream' || data.status === 'tunnel') {
-      if (data.url) {
-        console.log(`[Cobalt] Resolving valid stream URL from ${data.status} response.`);
-        return data.url;
-      }
-    }
-
-    console.warn(`[Cobalt] Unrecognized schema or missing URL property. Status was: ${data.status}`);
-    return null;
-
-  } catch (error) {
-    console.error(`[Cobalt] POST request failed!`);
-    if (error.response) {
-      console.error(`[Cobalt] HTTP Error Status:`, error.response.status);
-      console.error(`[Cobalt] HTTP Error Body:`, JSON.stringify(error.response.data, null, 2));
-    } else {
-      console.error(`[Cobalt] Network/Timeout Error:`, error.message);
-    }
-    return null; // Silently fallback to yt-dlp
-  }
-}
-
 app.get("/download", async (req, res) => {
   const { url, format = 'audio' } = req.query;
   if (!url) return res.status(400).json({ error: "Missing url" });
@@ -349,32 +287,6 @@ app.get("/download", async (req, res) => {
 
     let downloadTarget = url;
     let title = 'audio';
-
-    // IMPORTANT: Cobalt API Self-Hosted Intercept for YouTube links
-    // If the link is YouTube, try to hit the user's Docker Cobalt instance to bypass Google Vercel Blocks
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      const cobaltStreamUrl = await fetchFromCobalt(url, format);
-      if (cobaltStreamUrl) {
-        // If Cobalt successfully extracted it, we can pipe the audio directly and completely bypass yt-dlp!
-        console.log(`[Cobalt] Streaming ${format} directly to client...`);
-        try {
-          // Attempt to fetch title from oEmbed since Cobalt doesn't always provide it cleanly in the stream URL
-          try {
-            const oembed = await axios.get(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, { timeout: 3000 });
-            title = oembed.data.title || 'audio';
-          } catch (e) { }
-
-          const ext = format === 'video' ? 'mp4' : 'mp3';
-          const filename = `${title}.${ext}`.replace(/[^a-z0-9 \.-]/gi, '_');
-          const audioRes = await axios.get(cobaltStreamUrl, { responseType: 'stream', timeout: 30000 });
-
-          return audioRes.data.pipe(res);
-        } catch (streamErr) {
-          console.error(`[Cobalt] Streaming from Cobalt URL failed. Falling back to yt-dlp.`, streamErr.message);
-          // Fall through to yt-dlp if the stream pipe fails
-        }
-      }
-    }
 
     // IMPORTANT: Bypass Spotify DRM by searching YouTube for the track instead
     if (url.includes('spotify.com') || url.includes('spotify:')) {
