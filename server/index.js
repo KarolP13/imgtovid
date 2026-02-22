@@ -254,7 +254,13 @@ app.get("/extract-cover", async (req, res) => {
     }
   } catch (e) {
     console.error("Extract Cover Error:", e.message);
-    res.status(500).json({ error: "Failed to extract cover" });
+    let errMsg = "Failed to extract cover";
+    let detailMsg = e.message || "";
+    if (detailMsg.includes("Sign in to confirm") && detailMsg.includes("bot")) {
+      errMsg = "YouTube blocked the server";
+      detailMsg = "YouTube aggressively blocks datacenter IPs like ours. Please use a Spotify or SoundCloud link instead.";
+    }
+    res.status(500).json({ error: errMsg, detail: detailMsg });
   }
 });
 
@@ -445,13 +451,25 @@ app.get("/download", async (req, res) => {
 
     } catch (execErr) {
       console.error("yt-dlp exec error:", execErr);
-      if (!res.headersSent) res.status(500).json({ error: "Download process failed", detail: execErr.message });
+      let errMsg = "Download process failed";
+      let detailMsg = execErr.message || "";
+      if (detailMsg.includes("Sign in to confirm") && detailMsg.includes("bot")) {
+        errMsg = "YouTube blocked the server";
+        detailMsg = "YouTube aggressively blocks datacenter IPs like ours from downloading. Please use a Spotify or SoundCloud link instead.";
+      }
+      if (!res.headersSent) res.status(500).json({ error: errMsg, detail: detailMsg });
     }
 
   } catch (e) {
     console.error("Download error:", e.message);
+    let errMsg = "Download failed";
+    let detailMsg = e.message || "";
+    if (detailMsg.includes("Sign in to confirm") && detailMsg.includes("bot")) {
+      errMsg = "YouTube blocked the server";
+      detailMsg = "YouTube aggressively blocks datacenter IPs like ours from downloading. Please use a Spotify or SoundCloud link instead.";
+    }
     if (!res.headersSent) {
-      res.status(500).json({ error: "Download failed", detail: e.message });
+      res.status(500).json({ error: errMsg, detail: detailMsg });
     }
   }
 });
