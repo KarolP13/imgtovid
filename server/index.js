@@ -235,7 +235,7 @@ app.get("/extract-cover", async (req, res) => {
       const binaryPath = path.resolve(__dirname, '..', 'yt-dlp');
       const ytDlpWrap = new YTDlpWrap(binaryPath);
 
-      const metadataStr = await ytDlpWrap.execPromise([url, '--dump-json', '--no-playlist', '--extractor-args', 'youtube:player_client=ios,android,web']);
+      const metadataStr = await ytDlpWrap.execPromise([url, '--dump-json', '--no-playlist']);
       const metadata = JSON.parse(metadataStr);
 
       if (metadata.thumbnail) {
@@ -273,7 +273,7 @@ async function fetchFromCobalt(youtubeUrl) {
 
   try {
     const res = await axios.post(
-      cobaltUrl.endsWith('/') ? `${cobaltUrl}api/json` : `${cobaltUrl}/api/json`,
+      cobaltUrl,
       {
         url: youtubeUrl,
         aFormat: "mp3",
@@ -462,13 +462,7 @@ app.get("/download", async (req, res) => {
       }
     } else {
       // Fallback for non-spotify urls (e.g. Soundcloud)
-      const metadataStr = await ytDlpWrap.execPromise([
-        url,
-        '--dump-json',
-        '--no-playlist',
-        '--extractor-args', 'youtube:player_client=ios,android,web'
-      ]);
-      const metadata = JSON.parse(metadataStr);
+      const metadata = await ytDlpWrap.getVideoInfo(url);
       title = metadata.title || 'audio';
     }
 
@@ -492,7 +486,6 @@ app.get("/download", async (req, res) => {
         '-f', 'bestaudio',
         '--no-playlist',
         '--max-downloads', '1',
-        '--extractor-args', 'youtube:player_client=ios,android,web',
         '--cache-dir', '/tmp/yt-dlp-cache',
         '--output', `${tmpFilePathBase}.%(ext)s`
       ]).catch(execErr => {

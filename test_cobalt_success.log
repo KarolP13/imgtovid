@@ -1,0 +1,12 @@
+Server running on 3020
+Sending request...
+Downloading via yt-dlp for: https://youtu.be/xVsa7whnDfU
+Using yt-dlp binary at: /Users/karolp/Downloads/coverclip/yt-dlp
+[Cobalt] Attempting to extract via Cobalt API at: https://cobalt-production-37d8.up.railway.app/
+[Cobalt] Request failed (Timeout or Offline): Request failed with status code 404
+Starting yt-dlp stream for: Mk.gee - How many miles (Official Audio)
+Downloading to temp file prefix: /tmp/1771791183262_audio
+yt-dlp threw a non-fatal warning, but file exists. Proceeding.
+yt-dlp download complete. Locating output file...
+Found actual streamable file: /tmp/1771791183262_audio.webm
+Response: 200
