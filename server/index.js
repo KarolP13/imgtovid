@@ -264,6 +264,54 @@ app.get("/extract-cover", async (req, res) => {
   }
 });
 
+// --- Self-Hosted Cobalt API Helper ---
+async function fetchFromCobalt(youtubeUrl) {
+  const cobaltUrl = process.env.COBALT_API_URL;
+  if (!cobaltUrl) return null;
+
+  console.log(`[Cobalt] Attempting to extract via Cobalt API at: ${cobaltUrl}`);
+
+  try {
+    const res = await axios.post(
+      cobaltUrl.endsWith('/') ? `${cobaltUrl}api/json` : `${cobaltUrl}/api/json`,
+      {
+        url: youtubeUrl,
+        aFormat: "mp3",
+        isAudioOnly: true
+      },
+      {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000 // 10 second timeout
+      }
+    );
+
+    const data = res.data;
+
+    // Cobalt Responses: { status: 'redirect' | 'stream' | 'tunnel' | 'error' | 'picker', url?: string }
+    if (data.status === 'error' || data.status === 'picker') {
+      console.warn(`[Cobalt] API returned unusable status: ${data.status}`);
+      return null;
+    }
+
+    if (data.status === 'redirect' || data.status === 'stream' || data.status === 'tunnel') {
+      if (data.url) {
+        console.log(`[Cobalt] Success! Status: ${data.status}, URL: ${data.url}`);
+        return data.url;
+      }
+    }
+
+    console.warn(`[Cobalt] Unrecognized schema or missing URL property:`, data);
+    return null;
+
+  } catch (error) {
+    console.error(`[Cobalt] Request failed (Timeout or Offline):`, error.message);
+    return null; // Silently fallback
+  }
+}
+
 app.get("/download", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "Missing url" });
@@ -286,6 +334,33 @@ app.get("/download", async (req, res) => {
 
     let downloadTarget = url;
     let title = 'audio';
+
+    // IMPORTANT: Cobalt API Self-Hosted Intercept for YouTube links
+    // If the link is YouTube, try to hit the user's Docker Cobalt instance to bypass Google Vercel Blocks
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      const cobaltStreamUrl = await fetchFromCobalt(url);
+      if (cobaltStreamUrl) {
+        // If Cobalt successfully extracted it, we can pipe the audio directly and completely bypass yt-dlp!
+        console.log(`[Cobalt] Streaming audio directly to client...`);
+        try {
+          // Attempt to fetch title from oEmbed since Cobalt doesn't always provide it cleanly in the stream URL
+          try {
+            const oembed = await axios.get(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`, { timeout: 3000 });
+            title = oembed.data.title || 'audio';
+          } catch (e) { }
+
+          const filename = `${title}.mp3`.replace(/[^a-z0-9 \.-]/gi, '_');
+          const audioRes = await axios.get(cobaltStreamUrl, { responseType: 'stream', timeout: 30000 });
+
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          res.setHeader('Content-Type', 'audio/mpeg');
+          return audioRes.data.pipe(res);
+        } catch (streamErr) {
+          console.error(`[Cobalt] Streaming from Cobalt URL failed. Falling back to yt-dlp.`, streamErr.message);
+          // Fall through to yt-dlp if the stream pipe fails
+        }
+      }
+    }
 
     // IMPORTANT: Bypass Spotify DRM by searching YouTube for the track instead
     if (url.includes('spotify.com') || url.includes('spotify:')) {
