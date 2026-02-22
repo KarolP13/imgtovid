@@ -1,0 +1,20 @@
+Server running on 3030
+Sending request...
+Downloading via yt-dlp for: https://youtu.be/xVsa7whnDfU
+Using yt-dlp binary at: /Users/karolp/Downloads/coverclip/yt-dlp
+[Cobalt] Initializing YouTube extraction via Cobalt for: https://youtu.be/xVsa7whnDfU
+[Cobalt] POSTing to endpoint: https://cobalt-production-37d8.up.railway.app/
+[Cobalt] POST request failed!
+[Cobalt] HTTP Error Status: 400
+[Cobalt] HTTP Error Body: {
+  "status": "error",
+  "error": {
+    "code": "error.api.invalid_body"
+  }
+}
+Starting yt-dlp stream for: Mk.gee - How many miles (Official Audio)
+Downloading to temp file prefix: /tmp/1771792109368_audio
+yt-dlp threw a non-fatal warning, but file exists. Proceeding.
+yt-dlp download complete. Locating output file...
+Found actual streamable file: /tmp/1771792109368_audio.webm
+Response: 200

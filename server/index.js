@@ -266,27 +266,36 @@ app.get("/extract-cover", async (req, res) => {
 
 // --- Self-Hosted Cobalt API Helper ---
 async function fetchFromCobalt(youtubeUrl) {
-  const cobaltUrl = process.env.COBALT_API_URL;
-  if (!cobaltUrl) return null;
+  const cobaltUrlRaw = process.env.COBALT_API_URL;
+  if (!cobaltUrlRaw) return null;
 
-  console.log(`[Cobalt] Attempting to extract via Cobalt API at: ${cobaltUrl}`);
+  // Formatting endpoint logic to support both exact endpoints or bare domains.
+  let cobaltUrl = cobaltUrlRaw;
+  if (!cobaltUrl.endsWith('/api/json') && !cobaltUrl.endsWith('/')) {
+    cobaltUrl += '/'; // Ensure trailing slash if it's a bare domain
+  }
+
+  console.log(`[Cobalt] Initializing YouTube extraction via Cobalt for: ${youtubeUrl}`);
+  console.log(`[Cobalt] POSTing to endpoint: ${cobaltUrl}`);
 
   try {
     const res = await axios.post(
       cobaltUrl,
       {
         url: youtubeUrl,
-        aFormat: "mp3",
-        isAudioOnly: true
+        downloadMode: "audio"
       },
       {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        timeout: 10000 // 10 second timeout
+        timeout: 10000 // 10 second timeout strictly enforced
       }
     );
+
+    console.log(`[Cobalt] HTTP Status Code: ${res.status}`);
+    console.log(`[Cobalt] Full JSON Response Body:`, JSON.stringify(res.data, null, 2));
 
     const data = res.data;
 
@@ -298,17 +307,23 @@ async function fetchFromCobalt(youtubeUrl) {
 
     if (data.status === 'redirect' || data.status === 'stream' || data.status === 'tunnel') {
       if (data.url) {
-        console.log(`[Cobalt] Success! Status: ${data.status}, URL: ${data.url}`);
+        console.log(`[Cobalt] Resolving valid stream URL from ${data.status} response.`);
         return data.url;
       }
     }
 
-    console.warn(`[Cobalt] Unrecognized schema or missing URL property:`, data);
+    console.warn(`[Cobalt] Unrecognized schema or missing URL property. Status was: ${data.status}`);
     return null;
 
   } catch (error) {
-    console.error(`[Cobalt] Request failed (Timeout or Offline):`, error.message);
-    return null; // Silently fallback
+    console.error(`[Cobalt] POST request failed!`);
+    if (error.response) {
+      console.error(`[Cobalt] HTTP Error Status:`, error.response.status);
+      console.error(`[Cobalt] HTTP Error Body:`, JSON.stringify(error.response.data, null, 2));
+    } else {
+      console.error(`[Cobalt] Network/Timeout Error:`, error.message);
+    }
+    return null; // Silently fallback to yt-dlp
   }
 }
 
