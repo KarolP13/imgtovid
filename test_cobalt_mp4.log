@@ -1,0 +1,16 @@
+Server running on 3050
+Sending video request...
+Downloading via yt-dlp for: https://youtu.be/xVsa7whnDfU
+Using yt-dlp binary at: /Users/karolp/Downloads/coverclip/yt-dlp
+[Cobalt] Initializing YouTube extraction via Cobalt for: https://youtu.be/xVsa7whnDfU (Format: video)
+[Cobalt] POSTing to endpoint: https://cobalt-production-37d8.up.railway.app/
+[Cobalt] HTTP Status Code: 200
+[Cobalt] Full JSON Response Body: {
+  "status": "tunnel",
+  "url": "https://cobalt-production-37d8.up.railway.app/tunnel?id=QfA7MsrEOEJQS9L0HZ5lM&exp=1771792664036&sig=1d8dQkjJ0HsevANN5S71dfl9sQqOZuXJIGRfRtoPAZI&sec=H4EHr7DAu2XUmjefwVWq2dDyO3eM2rihKv5v0vUHJYw&iv=A9QCpddEn_rGHC6MVn5vKA",
+  "filename": "Mk.gee - How many miles (Official Audio) - Mkgee (1080p, h264).mp4"
+}
+[Cobalt] Resolving valid stream URL from tunnel response.
+[Cobalt] Streaming video directly to client...
+Headers: {"x-powered-by":"Express","access-control-allow-origin":"*","date":"Sun, 22 Feb 2026 20:36:15 GMT","connection":"keep-alive","keep-alive":"timeout=5","content-length":"0"}
+Response: 200

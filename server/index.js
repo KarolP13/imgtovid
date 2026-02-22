@@ -265,7 +265,7 @@ app.get("/extract-cover", async (req, res) => {
 });
 
 // --- Self-Hosted Cobalt API Helper ---
-async function fetchFromCobalt(youtubeUrl) {
+async function fetchFromCobalt(youtubeUrl, format = 'audio') {
   const cobaltUrlRaw = process.env.COBALT_API_URL;
   if (!cobaltUrlRaw) return null;
 
@@ -275,7 +275,7 @@ async function fetchFromCobalt(youtubeUrl) {
     cobaltUrl += '/'; // Ensure trailing slash if it's a bare domain
   }
 
-  console.log(`[Cobalt] Initializing YouTube extraction via Cobalt for: ${youtubeUrl}`);
+  console.log(`[Cobalt] Initializing YouTube extraction via Cobalt for: ${youtubeUrl} (Format: ${format})`);
   console.log(`[Cobalt] POSTing to endpoint: ${cobaltUrl}`);
 
   try {
@@ -283,7 +283,7 @@ async function fetchFromCobalt(youtubeUrl) {
       cobaltUrl,
       {
         url: youtubeUrl,
-        downloadMode: "audio"
+        downloadMode: format === 'video' ? 'auto' : 'audio'
       },
       {
         headers: {
@@ -328,7 +328,7 @@ async function fetchFromCobalt(youtubeUrl) {
 }
 
 app.get("/download", async (req, res) => {
-  const { url } = req.query;
+  const { url, format = 'audio' } = req.query;
   if (!url) return res.status(400).json({ error: "Missing url" });
 
   try {
@@ -353,10 +353,10 @@ app.get("/download", async (req, res) => {
     // IMPORTANT: Cobalt API Self-Hosted Intercept for YouTube links
     // If the link is YouTube, try to hit the user's Docker Cobalt instance to bypass Google Vercel Blocks
     if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      const cobaltStreamUrl = await fetchFromCobalt(url);
+      const cobaltStreamUrl = await fetchFromCobalt(url, format);
       if (cobaltStreamUrl) {
         // If Cobalt successfully extracted it, we can pipe the audio directly and completely bypass yt-dlp!
-        console.log(`[Cobalt] Streaming audio directly to client...`);
+        console.log(`[Cobalt] Streaming ${format} directly to client...`);
         try {
           // Attempt to fetch title from oEmbed since Cobalt doesn't always provide it cleanly in the stream URL
           try {
@@ -364,11 +364,10 @@ app.get("/download", async (req, res) => {
             title = oembed.data.title || 'audio';
           } catch (e) { }
 
-          const filename = `${title}.mp3`.replace(/[^a-z0-9 \.-]/gi, '_');
+          const ext = format === 'video' ? 'mp4' : 'mp3';
+          const filename = `${title}.${ext}`.replace(/[^a-z0-9 \.-]/gi, '_');
           const audioRes = await axios.get(cobaltStreamUrl, { responseType: 'stream', timeout: 30000 });
 
-          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-          res.setHeader('Content-Type', 'audio/mpeg');
           return audioRes.data.pipe(res);
         } catch (streamErr) {
           console.error(`[Cobalt] Streaming from Cobalt URL failed. Falling back to yt-dlp.`, streamErr.message);
@@ -481,29 +480,33 @@ app.get("/download", async (req, res) => {
       title = metadata.title || 'audio';
     }
 
-    const filename = `${title}.mp3`.replace(/[^a-z0-9 \.-]/gi, '_');
-
-    console.log(`Starting yt-dlp stream for: ${title}`);
-
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Type', 'audio/mpeg');
-
     // Vercel only allows writing to /tmp, and yt-dlp ignores --paths when outputting to stdout
     // so we must save the full file to /tmp first, then stream it.
+    let finalOutputExtension = format === 'video' ? 'mp4' : 'mp3';
     const tmpBaseName = `${Date.now()}_audio`;
-    const tmpFilePathBase = `/tmp/${tmpBaseName}`;
+    const tmpFilePathBase = path.join('/tmp', tmpBaseName);
 
+    console.log(`Starting yt-dlp stream for: ${title} (Format: ${format})`);
     console.log(`Downloading to temp file prefix: ${tmpFilePathBase}`);
 
+    let ytDlpArgs = [
+      downloadTarget,
+      '--no-playlist',
+      '--max-downloads', '1',
+      '--cache-dir', '/tmp/yt-dlp-cache'
+    ];
+
+    if (format === 'video') {
+      ytDlpArgs.push('-f', 'bestvideo+bestaudio');
+      ytDlpArgs.push('--merge-output-format', 'mp4');
+    } else {
+      ytDlpArgs.push('-f', 'bestaudio');
+    }
+
+    ytDlpArgs.push('--output', `${tmpFilePathBase}.%(ext)s`);
+
     try {
-      await ytDlpWrap.execPromise([
-        downloadTarget,
-        '-f', 'bestaudio',
-        '--no-playlist',
-        '--max-downloads', '1',
-        '--cache-dir', '/tmp/yt-dlp-cache',
-        '--output', `${tmpFilePathBase}.%(ext)s`
-      ]).catch(execErr => {
+      await ytDlpWrap.execPromise(ytDlpArgs).catch(execErr => {
         // Ignored warning check: if any file starting with our prefix exists in /tmp, download succeeded.
         const files = fs.readdirSync('/tmp/');
         const exists = files.some(f => f.startsWith(tmpBaseName) && !f.endsWith('.part'));

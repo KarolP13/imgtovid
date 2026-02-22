@@ -22,7 +22,8 @@ export default function App() {
 
   // Downloader State
   const [downloadUrl, setDownloadUrl] = useState('');
-  const [downloadStatus, setDownloadStatus] = useState('idle');
+  const [downloadStatus, setDownloadStatus] = useState('idle'); // idle, downloading, done, error
+  const [downloadFormat, setDownloadFormat] = useState('audio'); // audio, video
 
   // General State
   const [status, setStatus] = useState('idle');
@@ -189,7 +190,7 @@ export default function App() {
     setErrorMsg('');
 
     try {
-      const res = await fetch(`/download?url=${encodeURIComponent(downloadUrl)}`);
+      const res = await fetch(`/download?url=${encodeURIComponent(downloadUrl)}&format=${downloadFormat}`);
 
       if (!res.ok) {
         // Try to parse error as JSON, otherwise read text
@@ -210,7 +211,7 @@ export default function App() {
       a.href = url;
 
       const disposition = res.headers.get('Content-Disposition');
-      let filename = 'audio.mp3';
+      let filename = downloadFormat === 'video' ? 'video.mp4' : 'audio.mp3';
       if (disposition && disposition.indexOf('attachment') !== -1) {
         const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
         const matches = filenameRegex.exec(disposition);
@@ -527,11 +528,25 @@ export default function App() {
                   onChange={e => setDownloadUrl(e.target.value)}
                 />
               </div>
+
+              <div className="input-group" style={{ marginTop: '12px' }}>
+                <label>Format</label>
+                <select
+                  className="text-input"
+                  value={downloadFormat}
+                  onChange={e => setDownloadFormat(e.target.value)}
+                  style={{ width: '100%', cursor: 'pointer', appearance: 'auto' }}
+                >
+                  <option value="audio">MP3 (Audio)</option>
+                  <option value="video">MP4 (Video)</option>
+                </select>
+              </div>
+
               <div className="action-area" style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
                 {downloadStatus !== 'downloading' && (
                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
                     <button className="generate-btn" style={{ flex: '1 1 auto', minWidth: '200px' }} onClick={handleDownload} disabled={!downloadUrl}>
-                      {downloadStatus === 'done' ? '✓ Downloaded!' : 'Download MP3'}
+                      {downloadStatus === 'done' ? '✓ Downloaded!' : `Download ${downloadFormat === 'video' ? 'MP4' : 'MP3'}`}
                     </button>
                     <button className="text-btn" onClick={() => {
                       if (!downloadUrl) return;
@@ -555,7 +570,7 @@ export default function App() {
           </div>
         )}
       </main>
-      <div className="version-badge">v1.0.41</div>
+      <div className="version-badge">v1.0.42</div>
     </div>
   );
 }
